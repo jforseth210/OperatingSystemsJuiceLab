@@ -36,7 +36,7 @@ public class Plant implements Runnable {
         }
         System.out.println("Total provided/processed = " + totalProvided + "/" + totalProcessed);
         System.out.println("Created " + totalBottles +
-                ", wasted " + totalWasted + " oranges");
+                           ", wasted " + totalWasted + " oranges");
     }
 
     private static void delay(long time, String errMsg) {
@@ -49,25 +49,21 @@ public class Plant implements Runnable {
     }
 
     public final int ORANGES_PER_BOTTLE = 3;
-    public final int NUM_WORKERS = 2;
-    private final Thread[] threads = new Thread[NUM_WORKERS];
+
+    private final Thread thread;
     private int orangesProvided;
     private int orangesProcessed;
     private volatile boolean timeToWork;
 
-    Plant(int plantNum) {
+    Plant(int threadNum) {
         orangesProvided = 0;
         orangesProcessed = 0;
-        for (int i = 0; i < NUM_WORKERS; i++) {
-            threads[i] = new Thread(this, "Plant[" + plantNum + "] Worker[" + i + "]");
-        }
+        thread = new Thread(this, "Plant[" + threadNum + "]");
     }
 
     public void startPlant() {
         timeToWork = true;
-        for (Thread thread : threads) {
-            thread.start();
-        }
+        thread.start();
     }
 
     public void stopPlant() {
@@ -75,12 +71,10 @@ public class Plant implements Runnable {
     }
 
     public void waitToStop() {
-        for (Thread thread : threads) {
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                System.err.println(thread.getName() + " stop malfunction");
-            }
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            System.err.println(thread.getName() + " stop malfunction");
         }
     }
 
@@ -88,7 +82,7 @@ public class Plant implements Runnable {
         System.out.print(Thread.currentThread().getName() + " Processing oranges");
         while (timeToWork) {
             processEntireOrange(new Orange());
-            incrementProvided();
+            orangesProvided++;
             System.out.print(".");
         }
         System.out.println("");
@@ -99,15 +93,7 @@ public class Plant implements Runnable {
         while (o.getState() != Orange.State.Bottled) {
             o.runProcess();
         }
-        incrementProcessed();
-    }
-
-    private synchronized void incrementProcessed() {
         orangesProcessed++;
-    }
-
-    private synchronized void incrementProvided() {
-        orangesProvided++;
     }
 
     public int getProvidedOranges() {
