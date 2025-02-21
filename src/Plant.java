@@ -36,15 +36,14 @@ public class Plant implements Runnable {
         }
         System.out.println("Total provided/processed = " + totalProvided + "/" + totalProcessed);
         System.out.println("Created " + totalBottles +
-                           ", wasted " + totalWasted + " oranges");
+                ", wasted " + totalWasted + " oranges");
     }
 
     private static void delay(long time, String errMsg) {
         long sleepTime = Math.max(1, time);
         try {
             Thread.sleep(sleepTime);
-        } catch (InterruptedException e) {
-            System.err.println(errMsg);
+        } catch (InterruptedException ignored) {
         }
     }
 
@@ -54,6 +53,7 @@ public class Plant implements Runnable {
     private int orangesProvided;
     private int orangesProcessed;
     private volatile boolean timeToWork;
+    private volatile BlockingMailbox mailbox = new BlockingMailbox();
 
     Plant(int threadNum) {
         orangesProvided = 0;
@@ -80,20 +80,25 @@ public class Plant implements Runnable {
 
     public void run() {
         System.out.print(Thread.currentThread().getName() + " Processing oranges");
+        
+        // Start one worker to fetch and peel oranges
+        Thread fetchAndPeeler;
+        fetchAndPeeler = new Thread(this::fetchAndPeelOranges, "Fetcher");
+        fetchAndPeeler.setDaemon(true);
+        fetchAndPeeler.start();
+        
+        // Start one worker to squeeze, bottle, and inspect oranges
+        Thread squeezerBottlerAndInspector;
+        squeezerBottlerAndInspector = new Thread(this::squeezeBottleAndInspectOranges, "Squeezer");
+        squeezerBottlerAndInspector.setDaemon(true);
+        squeezerBottlerAndInspector.start();
+        
+        // Wait until it's time to stop
         while (timeToWork) {
-            processEntireOrange(new Orange());
-            orangesProvided++;
-            System.out.print(".");
         }
+
         System.out.println("");
         System.out.println(Thread.currentThread().getName() + " Done");
-    }
-
-    public void processEntireOrange(Orange o) {
-        while (o.getState() != Orange.State.Bottled) {
-            o.runProcess();
-        }
-        orangesProcessed++;
     }
 
     public int getProvidedOranges() {
@@ -110,5 +115,27 @@ public class Plant implements Runnable {
 
     public int getWaste() {
         return orangesProcessed % ORANGES_PER_BOTTLE;
+    }
+
+    public void fetchAndPeelOranges() {
+        while (timeToWork) {
+            Orange o = new Orange();
+            System.out.print(".");
+            orangesProvided++;
+            while (o.getState() != Orange.State.Fetched) {
+                o.runProcess();
+            }
+            mailbox.put(o);
+        }
+    }
+
+    public void squeezeBottleAndInspectOranges() {
+        while (timeToWork) {
+            Orange o = mailbox.get();
+            while (o.getState() != Orange.State.Bottled) {
+                o.runProcess();
+            }
+        }
+        orangesProcessed++;
     }
 }
